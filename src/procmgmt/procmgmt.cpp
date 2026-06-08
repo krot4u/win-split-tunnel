@@ -1,5 +1,6 @@
 #include "procmgmt.h"
 #include "context.h"
+#include "../devicecontext.h"
 #include "../util.h"
 #include "../defs/events.h"
 #include "../eventing/builder.h"
@@ -156,8 +157,29 @@ EvaluateSplitting
 )
 {
     auto registeredImage = Context->RegisteredImage->Instance;
+    auto deviceContext = (ST_DEVICE_CONTEXT*)Context->CallbackContext;
 
-    if (registeredimage::HasEntryExact(registeredImage, &RegistryEntry->ImageName))
+    const bool inList = registeredimage::HasEntryExact(
+        registeredImage,
+        &RegistryEntry->ImageName);
+
+    if (deviceContext->SplitIncludeOnlyMode)
+    {
+        //
+        // Include-only: listed binaries stay in tunnel; others bypass (split ON).
+        //
+        if (inList)
+        {
+            return;
+        }
+
+        RegistryEntry->Settings.Split = ST_PROCESS_SPLIT_STATUS_ON_BY_CONFIG;
+        ArrivalEvent->SplittingReason |= ST_SPLITTING_REASON_BY_CONFIG;
+
+        goto Duplicate_imagename;
+    }
+
+    if (inList)
     {
         RegistryEntry->Settings.Split = ST_PROCESS_SPLIT_STATUS_ON_BY_CONFIG;
         ArrivalEvent->SplittingReason |= ST_SPLITTING_REASON_BY_CONFIG;

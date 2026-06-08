@@ -55,6 +55,13 @@ ClearConfiguration
 );
 
 NTSTATUS
+SetSplitPolicy
+(
+    WDFDEVICE Device,
+    WDFREQUEST Request
+);
+
+NTSTATUS
 RegisterProcesses
 (
     WDFDEVICE Device,

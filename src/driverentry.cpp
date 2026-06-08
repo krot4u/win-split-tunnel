@@ -626,6 +626,7 @@ StEvtIoDeviceControlSerial
             //
             // IOCTL_ST_REGISTER_IP_ADDRESSES
             // IOCTL_ST_GET_IP_ADDRESSES
+            // IOCTL_ST_SET_SPLIT_POLICY
             // IOCTL_ST_SET_CONFIGURATION
             // IOCTL_ST_GET_CONFIGURATION
             // IOCTL_ST_CLEAR_CONFIGURATION
@@ -647,6 +648,15 @@ StEvtIoDeviceControlSerial
             if (IoControlCode == IOCTL_ST_GET_IP_ADDRESSES)
             {
                 ioctl::GetIpAddressesComplete(device, Request);
+
+                return;
+            }
+
+            if (IoControlCode == IOCTL_ST_SET_SPLIT_POLICY)
+            {
+                auto status = ioctl::SetSplitPolicy(device, Request);
+
+                WdfRequestComplete(Request, status);
 
                 return;
             }

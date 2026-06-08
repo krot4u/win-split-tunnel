@@ -53,3 +53,12 @@
 //
 #define IOCTL_ST_RESET \
 	CTL_CODE(ST_DEVICE_TYPE, 11, METHOD_NEITHER, FILE_ANY_ACCESS)
+
+//
+// IOCTL_ST_SET_SPLIT_POLICY (Amnezia extension):
+// Input: ULONG — 0 = exclude-listed apps from tunnel (default / Mullvad),
+//        1 = include-only: only listed apps stay in tunnel; others bypass VPN.
+// Valid in ST_DRIVER_STATE_READY and ST_DRIVER_STATE_ENGAGED (same policy re-set only).
+//
+#define IOCTL_ST_SET_SPLIT_POLICY \
+	CTL_CODE(ST_DEVICE_TYPE, 12, METHOD_BUFFERED, FILE_ANY_ACCESS)

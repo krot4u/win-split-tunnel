@@ -7,6 +7,7 @@
 #include "defs/process.h"
 #include "defs/queryprocess.h"
 #include "validation.h"
+#include "defs/ioctl.h"
 #include "eventing/eventing.h"
 #include "eventing/builder.h"
 
@@ -26,6 +27,7 @@ enum class MIN_REQUEST_SIZE
 {
 	INITIALIZE = sizeof(ST_SUBLAYER_GUIDS),
 	SET_CONFIGURATION = sizeof(ST_CONFIGURATION_HEADER),
+	SET_SPLIT_POLICY = sizeof(ULONG),
 	GET_CONFIGURATION = sizeof(SIZE_T),
 	REGISTER_PROCESSES = sizeof(ST_PROCESS_DISCOVERY_HEADER),
 	REGISTER_IP_ADDRESSES = sizeof(ST_IP_ADDRESSES),
@@ -119,7 +121,21 @@ UpdateTargetSplitSetting
 
     Entry->TargetSettings.Split = ST_PROCESS_SPLIT_STATUS_OFF;
 
-    if (registeredimage::HasEntryExact(context->RegisteredImage.Instance, &Entry->ImageName))
+    const bool inList = registeredimage::HasEntryExact(
+        context->RegisteredImage.Instance,
+        &Entry->ImageName);
+
+    if (context->SplitIncludeOnlyMode)
+    {
+        //
+        // Include-only: processes NOT matching the list bypass the tunnel (split ON).
+        //
+        if (!inList)
+        {
+            Entry->TargetSettings.Split = ST_PROCESS_SPLIT_STATUS_ON_BY_CONFIG;
+        }
+    }
+    else if (inList)
     {
         Entry->TargetSettings.Split = ST_PROCESS_SPLIT_STATUS_ON_BY_CONFIG;
     }
@@ -225,6 +241,12 @@ PropagateApplyTargetSettings
 
     if (!util::SplittingEnabled(Entry->TargetSettings.Split))
     {
+        if (context->SplitIncludeOnlyMode
+            && registeredimage::HasEntryExact(context->RegisteredImage.Instance, &Entry->ImageName))
+        {
+            return ApplyFinalizeTargetSettings(context, Entry);
+        }
+
         auto currentEntry = Entry;
 
         //
@@ -1285,11 +1307,69 @@ ClearConfiguration
 
     registeredimage::Reset(context->RegisteredImage.Instance);
 
+    context->SplitIncludeOnlyMode = FALSE;
+
     WdfWaitLockRelease(context->DriverState.Lock);
 
     DbgPrint("Successfully processed IOCTL_ST_CLEAR_CONFIGURATION\n");
 
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+SetSplitPolicy
+(
+    WDFDEVICE Device,
+    WDFREQUEST Request
+)
+{
+    PVOID buffer;
+    size_t bufferLength;
+
+    auto status = WdfRequestRetrieveInputBuffer(Request,
+        (size_t)MIN_REQUEST_SIZE::SET_SPLIT_POLICY, &buffer, &bufferLength);
+
+    if (!NT_SUCCESS(status))
+    {
+        return status;
+    }
+
+    if (bufferLength < sizeof(ULONG))
+    {
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    const ULONG mode = *(ULONG*)buffer;
+
+    if (mode > 1)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    auto context = DeviceGetSplitTunnelContext(Device);
+
+    WdfWaitLockAcquire(context->DriverState.Lock, NULL);
+
+    const BOOLEAN previous = context->SplitIncludeOnlyMode;
+    const BOOLEAN next = (mode != 0);
+
+    context->SplitIncludeOnlyMode = next;
+
+    NTSTATUS syncStatus = STATUS_SUCCESS;
+
+    if (context->DriverState.State == ST_DRIVER_STATE_ENGAGED && previous != next)
+    {
+        syncStatus = SyncProcessRegistry(context, true);
+
+        if (!NT_SUCCESS(syncStatus))
+        {
+            context->SplitIncludeOnlyMode = previous;
+        }
+    }
+
+    WdfWaitLockRelease(context->DriverState.Lock);
+
+    return syncStatus;
 }
 
 NTSTATUS

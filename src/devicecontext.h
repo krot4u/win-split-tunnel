@@ -43,6 +43,14 @@ typedef struct tag_ST_DEVICE_CONTEXT
 	eventing::CONTEXT *Eventing;
 
 	procbroker::CONTEXT *ProcessEventBroker;
+
+	//
+	// When FALSE (default): paths from IOCTL_ST_SET_CONFIGURATION are apps to exclude
+	// from the VPN tunnel (Mullvad behaviour).
+	// When TRUE (Amnezia): the same path list selects apps that must use the tunnel;
+	// all other processes are steered off the tunnel.
+	//
+	BOOLEAN SplitIncludeOnlyMode;
 }
 ST_DEVICE_CONTEXT;
 
